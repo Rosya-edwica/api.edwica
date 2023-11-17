@@ -1,0 +1,11 @@
+http_server:
+  address: "localhost:8000"
+  timeout: 120s
+  idle_timeout: 180s
+
+db:
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: "root"
+  name: "database_name"
