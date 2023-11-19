@@ -2,6 +2,7 @@ package tools
 
 import (
 	"net/url"
+	"strings"
 )
 
 // Выбираем только уникальные параметры в запросе и ведем поиск по ним
@@ -28,4 +29,17 @@ func DecodeAllQueries(items []string) []string {
 		decoded = append(decoded, text)
 	}
 	return decoded
+}
+
+func FilterCurrency(text string) string {
+	if strings.ToLower(text) == "руб." || strings.ToLower(text) == "rub" || strings.ToLower(text) == "₽" || strings.ToLower(text) == "«руб.»" {
+		return "RUB"
+	}
+	if strings.ToLower(text) == "дол." || strings.ToLower(text) == "usd" || strings.ToLower(text) == "$" {
+		return "USD"
+	}
+	if strings.ToLower(text) == "евро" || strings.ToLower(text) == "eur" {
+		return "EUR"
+	}
+	return text
 }
