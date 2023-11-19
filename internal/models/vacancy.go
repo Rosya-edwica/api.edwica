@@ -17,3 +17,9 @@ type QueryVacancies struct {
 	Query       string    `json:"skill"`
 	VacancyList []Vacancy `json:"materials"`
 }
+
+type Salary struct {
+	From     int
+	To       int
+	Currency string
+}

@@ -58,9 +58,11 @@ type Superjob struct {
 }
 
 type GeekJob struct {
-	Items []struct {
-		Id string `json:"id"`
-	} `json:"data"`
+	Items []GeekJobItem `json:"data"`
+}
+
+type GeekJobItem struct {
+	Id string `json:"id"`
 }
 
 type SuperjobToken struct {

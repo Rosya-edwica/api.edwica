@@ -45,7 +45,8 @@ func GetQueryVacancies(query string, platform string, limit int) (models.QueryVa
 		vacancies, _ := GetVacanciesFromSuperjob(query, limit)
 		QueryVacancies = append(QueryVacancies, vacancies...)
 	case "geekjob":
-		fmt.Println("Selected geekjob")
+		vacancies, _ := GetVacanciesFromGeekjob(query, limit)
+		QueryVacancies = append(QueryVacancies, vacancies...)
 	default:
 		vacancies, _ := GetVacanciesFromAllPlatforms(query, limit)
 		QueryVacancies = append(QueryVacancies, vacancies...)
@@ -58,7 +59,7 @@ func GetVacanciesFromAllPlatforms(query string, limit int) ([]models.Vacancy, er
 		QueryVacancies []models.Vacancy
 		wg             sync.WaitGroup
 	)
-	const platformsCount = 2
+	const platformsCount = 3
 	wg.Add(platformsCount)
 	go func(query string) {
 		defer wg.Done()
@@ -71,6 +72,11 @@ func GetVacanciesFromAllPlatforms(query string, limit int) ([]models.Vacancy, er
 		vacancies, _ := GetVacanciesFromSuperjob(query, limit)
 		QueryVacancies = append(QueryVacancies, vacancies...)
 	}(query)
+	go func(query string) {
+		defer wg.Done()
+		vacancies, _ := GetVacanciesFromGeekjob(query, limit)
+		QueryVacancies = append(QueryVacancies, vacancies...)
+	}(query)
 	wg.Wait()
 	return QueryVacancies, nil
 }
@@ -78,10 +84,6 @@ func GetVacanciesFromAllPlatforms(query string, limit int) ([]models.Vacancy, er
 func DecondeJsonResponse(url string, headers map[string]string, dataStruct interface{}, method string) (data interface{}, statusCode int) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			fmt.Println("Redirected to " + req.URL.String())
-			return nil
-		},
 	}
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
