@@ -26,7 +26,6 @@ func NewRepository(db *sqlx.DB) *Repository {
 
 func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error) {
 	rawVideos := make([]entities.Video, 0)
-	fmt.Println("Выбираем:", query)
 	dbQuery := `SELECT video.id as id, video.name as name, video.url as url, video.img as img
 	FROM video
 	INNER JOIN query_to_video ON video.id = query_to_video.video_id
@@ -55,17 +54,15 @@ func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) 
 				err = errors.Wrap(err, "video saving during rollback")
 				return
 			}
-
 			return
 		}
 		err = tx.Commit()
 	}()
 	err = r.saveVideos(tx, data.VideoList)
 	if err != nil {
-		// Если не удалось сохранить видосы, значит запрос не с чем связывать
-		return false, err
+		return false, err // Если не удалось сохранить видосы, значит запрос не с чем связывать
 	}
-	var videoIds []string
+	videoIds := []string{}
 	for _, i := range data.VideoList {
 		videoIds = append(videoIds, fmt.Sprintf("('%s', '%s')", data.Query, i.Id))
 	}
@@ -90,7 +87,7 @@ func (r *Repository) saveVideos(tx *sqlx.Tx, videos []models.Video) error {
 		valuesQuery = append(valuesQuery, "(?, ?, ?, ?)")
 		valuesArgs = append(valuesArgs, video.Id, video.Name, video.Url, video.Image)
 	}
-	query := fmt.Sprintf(`INSERT IGNORE INTO video(id, name, url, image)	VALUES %s`, strings.Join(valuesQuery, ","))
+	query := fmt.Sprintf(`INSERT IGNORE INTO video(id, name, url, img)	VALUES %s`, strings.Join(valuesQuery, ","))
 	_, err := tx.Exec(query, valuesArgs...)
 	if err != nil {
 		return errors.Wrap(err, "adding videos to db")
