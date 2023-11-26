@@ -1,17 +1,19 @@
 package vacancy
 
 import (
+	"errors"
+	"net/url"
 	"regexp"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
-	"github.com/Rosya-edwica/api.edwica/tools"
+	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 )
 
 func GetVacanciesFromTrudvsem(query string, limit int) ([]models.Vacancy, error) {
-	url := "http://opendata.trudvsem.ru/api/v1/vacancies/?text=" + query
-	resp, status := DecondeJsonResponse(url, nil, &Trudvsem{}, "GET")
-	if status != 200 {
-		panic(url + "STATUS " + string(status))
+	link := "http://opendata.trudvsem.ru/api/v1/vacancies/?text=" + url.PathEscape(query) // trudvsem не принимает слова с пробелом
+	resp, _ := DecondeJsonResponse(link, nil, &Trudvsem{}, "GET")
+	if resp == nil {
+		return nil, errors.New("не удалось получить данные trudvsem для запроса: " + query)
 	}
 	data := resp.(*Trudvsem)
 

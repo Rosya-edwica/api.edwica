@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
-	"github.com/Rosya-edwica/api.edwica/tools"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
+	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 	"github.com/gin-gonic/gin"
 )
 
-// TODO: Обработка ошибок
+const defaultLimit = 3
 
 func GetVacancies(c *gin.Context) {
 	var (
@@ -36,7 +37,7 @@ func GetVacancies(c *gin.Context) {
 }
 
 func GetQueryVacancies(query string, platform string, limit int) (models.QueryVacancies, error) {
-	var QueryVacancies []models.Vacancy
+	QueryVacancies := []models.Vacancy{}
 	switch platform {
 	case "trudvsem":
 		vacancies, _ := GetVacanciesFromTrudvsem(query, limit)
@@ -99,8 +100,8 @@ func DecondeJsonResponse(url string, headers map[string]string, dataStruct inter
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(dataStruct)
 	if err != nil {
-		fmt.Println(err, resp.StatusCode)
-		panic(err)
+		logger.Log.Error(fmt.Sprintf("decodeJsonResponse by url:%s err:%s", url, err))
+		return nil, 400
 	}
 	return dataStruct, resp.StatusCode
 }

@@ -2,10 +2,13 @@ package book
 
 import (
 	"fmt"
-	"github.com/Rosya-edwica/api.edwica/internal/entities"
-	"github.com/Rosya-edwica/api.edwica/internal/models"
 	"log"
 	"strings"
+
+	"github.com/Rosya-edwica/api.edwica/internal/entities"
+	"github.com/Rosya-edwica/api.edwica/internal/models"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/go-faster/errors"
 	"github.com/jmoiron/sqlx"
@@ -14,6 +17,10 @@ import (
 type Repository struct {
 	db *sqlx.DB
 }
+
+const (
+	ErrorMsgNotExistBookId = "book is does not exist"
+)
 
 func NewRepository(db *sqlx.DB) *Repository {
 	if db == nil {
@@ -38,6 +45,7 @@ func (r *Repository) GetByQuery(query string, limit int) ([]models.Book, error) 
 	}
 	err := r.db.Select(&rawBooks, dbQuery, query)
 	if err != nil {
+		logger.Log.Error("database.book.getByQuery:" + err.Error())
 		return nil, errors.Wrap(err, "select book")
 	}
 	return models.NewBooks(rawBooks), nil
@@ -55,6 +63,7 @@ func (r *Repository) GetByName(query string, limit int) ([]models.Book, error) {
 	}
 	err := r.db.Select(&rawBooks, dbQuery, query)
 	if err != nil {
+		logger.Log.Error("database.book.getByName:" + err.Error())
 		return nil, errors.Wrap(err, "select book by name")
 	}
 	return models.NewBooks(rawBooks), nil
@@ -65,12 +74,14 @@ func (r *Repository) GetByName(query string, limit int) ([]models.Book, error) {
 func (r *Repository) SaveBooks(data models.QueryBooks) (done bool, err error) {
 	tx, err := r.db.Beginx()
 	if err != nil {
+		logger.Log.Error("database.book.saveBooks- start transaction:" + err.Error())
 		return false, errors.Wrap(err, "book saving failed transaction")
 	}
 	defer func() {
 		if err != nil {
 			errRb := tx.Rollback()
 			if errRb != nil {
+				logger.Log.Error("database.book.saveBooks- failed stop transaction:" + err.Error())
 				err = errors.Wrap(err, "book saving during rollback")
 				return
 			}
@@ -78,6 +89,9 @@ func (r *Repository) SaveBooks(data models.QueryBooks) (done bool, err error) {
 			return
 		}
 		err = tx.Commit()
+		if err != nil {
+			logger.Log.Error("database.book.saveBooks- commit transaction:" + err.Error())
+		}
 	}()
 
 	var bookIds []string
@@ -85,11 +99,35 @@ func (r *Repository) SaveBooks(data models.QueryBooks) (done bool, err error) {
 		bookIds = append(bookIds, fmt.Sprintf("('%s', %d)", data.Query, i.Id))
 	}
 	//Связываем книги с запросом в таблице истории
-	_, err = tx.Exec(fmt.Sprintf("INSERT IGNORE INTO query_to_book(query, book_id) VALUES %s", strings.Join(bookIds, ",")))
-	fmt.Println(err, "fsdfdsfdsfsdfsdfdsf")
+	_, err = tx.Exec(fmt.Sprintf("INSERT INTO query_to_book(query, book_id) VALUES %s", strings.Join(bookIds, ",")))
 	if err != nil {
+		msErr, _ := err.(*mysql.MySQLError)
+		if msErr.Number == 1452 {
+			return false, errors.New(ErrorMsgNotExistBookId)
+		}
 		return false, err
 	}
 
+	return true, nil
+}
+
+// Сохраняем запросы, для которых не нашлось книг. Чтобы в будущем не тратить на них время
+func (r *Repository) SaveUndefiendQuery(query string) (bool, error) {
+	_, err := r.db.Exec(fmt.Sprintf("INSERT INTO query_to_book(query, book_id) VALUES('%s', NULL)", query))
+	if err != nil {
+		logger.Log.Error("database.book.SaveUndefiendQuery:" + err.Error())
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Удаляем ненужные связи - по сути этот метод создан только для тестов
+func (r *Repository) DeleteQueryFromHistory(query string) (bool, error) {
+	_, err := r.db.Exec(fmt.Sprintf("DELETE FROM query_to_book WHERE query = '%s'", query))
+	if err != nil {
+		logger.Log.Error("database.book.DeleteQueryFromHistory:" + err.Error())
+		return false, err
+	}
 	return true, nil
 }

@@ -1,24 +1,49 @@
 package config
 
 import (
-	"github.com/Rosya-edwica/api.edwica/internal/database"
-	"github.com/Rosya-edwica/api.edwica/internal/server"
 	"github.com/go-faster/errors"
 	"github.com/spf13/viper"
 )
 
-func init() {
-	viper.AddConfigPath("config/")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
+var (
+	DefaultPath = "config/"
+	DefaultName = "config"
+	DefaultType = "yaml"
+)
+
+func setViperSettings() {
+	viper.AddConfigPath(DefaultPath)
+	viper.SetConfigName(DefaultName)
+	viper.SetConfigType(DefaultType)
 }
 
-func LoadDBConfig() (*database.Config, error) {
+type DB struct {
+	Addr     string `yaml:"host" env-required:"true"`
+	Port     int    `yaml:"port" env-required:"true"`
+	User     string `yaml:"user" env-required:"true"`
+	Password string `yaml:"password" env-required:"true"`
+	DB       string `yaml:"name" env-required:"true"`
+}
+
+type Server struct {
+	Port string `yaml:"port" env-required:"true"`
+}
+
+type Telegram struct {
+	Token string
+	Chats []string
+}
+
+func LoadDBConfig(path string) (*DB, error) {
+	if path != "" {
+		DefaultPath = path
+	}
+	setViperSettings()
 	err := viper.ReadInConfig()
 	if err != nil {
-		return nil, errors.Wrap(err, "reading http config")
+		return nil, errors.Wrap(err, "reading db config")
 	}
-	return &database.Config{
+	return &DB{
 		Addr:     viper.GetString("db_host"),
 		Port:     viper.GetInt("db_port"),
 		User:     viper.GetString("db_user"),
@@ -27,12 +52,25 @@ func LoadDBConfig() (*database.Config, error) {
 	}, nil
 }
 
-func LoadHTTPConfig() (*server.Config, error) {
+func LoadHTTPConfig() (*Server, error) {
+	setViperSettings()
 	err := viper.ReadInConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "reading http config")
 	}
-	return &server.Config{
+	return &Server{
 		Port: viper.GetString("http_port"),
+	}, nil
+}
+
+func LoadTelegramConfig() (*Telegram, error) {
+	setViperSettings()
+	err := viper.ReadInConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "reading telegram config")
+	}
+	return &Telegram{
+		Token: viper.GetString("telegram_token"),
+		Chats: viper.GetStringSlice("telegram_chats"),
 	}, nil
 }

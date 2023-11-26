@@ -1,0 +1,13 @@
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /api/v1/videos/           --> github.com/Rosya-edwica/api.edwica/internal/controllers/video.GetVideos (3 handlers)
+[GIN-debug] GET    /api/v1/books/            --> github.com/Rosya-edwica/api.edwica/internal/controllers/book.GetBooks (3 handlers)
+[GIN-debug] GET    /api/v1/vacancies/        --> github.com/Rosya-edwica/api.edwica/internal/controllers/vacancy.GetVacancies (3 handlers)
+2023/11/26 14:38:09 server.go:25: Server running at port: 8000
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8000

@@ -1,22 +1,22 @@
 package server
 
 import (
-	"github.com/Rosya-edwica/api.edwica/internal/server/routes"
+	"fmt"
 	"log"
+
+	"github.com/Rosya-edwica/api.edwica/config"
+	"github.com/Rosya-edwica/api.edwica/internal/server/routes"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
-
-type Config struct {
-	Port string `yaml:"port" env-required:"true"`
-}
 
 type Server struct {
 	port   string
 	server *gin.Engine
 }
 
-func NewServer(cfg *Config) Server {
+func NewServer(cfg *config.Server) Server {
 	return Server{
 		port:   cfg.Port,
 		server: gin.Default(),
@@ -25,6 +25,6 @@ func NewServer(cfg *Config) Server {
 
 func (s *Server) Run() {
 	router := routes.ConfigRoutes(s.server)
-	log.Printf("Server running at port: %v", s.port)
+	logger.Log.Info(fmt.Sprintf("Server running at port: %v", s.port))
 	log.Fatal(router.Run(":" + s.port))
 }

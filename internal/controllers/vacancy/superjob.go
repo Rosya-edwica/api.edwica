@@ -2,15 +2,14 @@ package vacancy
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
-	"github.com/Rosya-edwica/api.edwica/tools"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
+	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 )
 
-// FIXME: Panics
 func GetVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
 	url := createSuperjobRequestUrl(query, limit)
 	headers, err := GetMapSuperjobHeaders()
@@ -19,13 +18,13 @@ func GetVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error)
 	}
 	resp, status := DecondeJsonResponse(url, headers, &Superjob{}, "GET")
 	if status != 200 {
+		logger.Log.Warning("Пытаемся обновить токен SuperJob")
 		err = UpdateSuperjobToken()
 		if err != nil {
-			panic("не обновили токен: " + err.Error())
+			logger.Log.Error("Не смогли обновить токен! " + err.Error())
 		}
-		fmt.Println("Пробуем снова")
+		logger.Log.Info("Пытаемся снова выполнить запрос с новым токеном")
 		return GetVacanciesFromSuperjob(query, limit)
-		// panic(url + "STATUS " + string(status))
 	}
 	data := resp.(*Superjob)
 	var vacancies []models.Vacancy

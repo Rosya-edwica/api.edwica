@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
-	"github.com/Rosya-edwica/api.edwica/tools"
+	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 	"github.com/go-faster/errors"
 	"github.com/gocolly/colly"
 )
@@ -17,11 +17,11 @@ func GetVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, error) 
 	url := "https://geekjob.ru/json/find/vacancy?qs=" + query
 	resp, _ := DecondeJsonResponse(url, nil, &GeekJob{}, "GET")
 	data := resp.(*GeekJob)
-	var vacancies []models.Vacancy
-	var wg sync.WaitGroup
-	var countVacancies int
-	const defaultLimit = 3
-
+	var (
+		vacancies      = []models.Vacancy{}
+		wg             sync.WaitGroup
+		countVacancies int
+	)
 	if limit > 0 && len(data.Items) >= limit {
 		countVacancies = limit
 	} else if limit == 0 && len(data.Items) >= defaultLimit {

@@ -17,7 +17,8 @@ import (
 
 	"github.com/Rosya-edwica/api.edwica/internal/database"
 	"github.com/Rosya-edwica/api.edwica/internal/database/video"
-	"github.com/Rosya-edwica/api.edwica/tools"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
+	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,11 +33,12 @@ func GetVideos(c *gin.Context) {
 		limit = DefaultLimit
 	}
 	response, notFounded, _ := GetVideosFromDB(queryList, limit, r)
+
 	if len(notFounded) > 0 {
 		newVideos, _ := GetUndiscoveredVideos(notFounded, limit)
 		for _, v := range newVideos {
 			done, err := r.SaveVideos(v)
-			fmt.Println(done, err)
+			logger.Log.Info(fmt.Sprintf("controllers.video.db: videos %s saving=%v err:%s", v.Query, done, err))
 		}
 		response = append(response, newVideos...)
 	}

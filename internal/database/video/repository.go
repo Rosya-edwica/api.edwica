@@ -2,10 +2,12 @@ package video
 
 import (
 	"fmt"
-	"github.com/Rosya-edwica/api.edwica/internal/entities"
-	"github.com/Rosya-edwica/api.edwica/internal/models"
 	"log"
 	"strings"
+
+	"github.com/Rosya-edwica/api.edwica/internal/entities"
+	"github.com/Rosya-edwica/api.edwica/internal/models"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
 
 	"github.com/go-faster/errors"
 	"github.com/jmoiron/sqlx"
@@ -36,6 +38,7 @@ func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error)
 	err := r.db.Select(&rawVideos, dbQuery, query)
 	fmt.Println(err)
 	if err != nil {
+		logger.Log.Error("database.video.getByQuery:" + err.Error())
 		return nil, errors.Wrap(err, "select video")
 	}
 	return models.NewVideos(rawVideos), nil
@@ -45,6 +48,7 @@ func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error)
 func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) {
 	tx, err := r.db.Beginx()
 	if err != nil {
+		logger.Log.Error("database.video.saveVideos - start transaction:" + err.Error())
 		return false, errors.Wrap(err, "video saving failed transaction")
 	}
 	defer func() {
@@ -52,11 +56,16 @@ func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) 
 			errRb := tx.Rollback()
 			if errRb != nil {
 				err = errors.Wrap(err, "video saving during rollback")
+				logger.Log.Error("database.video.saveVideos - stop transaction:" + err.Error())
 				return
 			}
 			return
 		}
 		err = tx.Commit()
+		if err != nil {
+			logger.Log.Error("database.video.saveVideos - commit transaction:" + err.Error())
+
+		}
 	}()
 	err = r.saveVideos(tx, data.VideoList)
 	if err != nil {
@@ -64,11 +73,18 @@ func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) 
 	}
 	videoIds := []string{}
 	for _, i := range data.VideoList {
+		if i.Id == "" {
+			continue
+		}
 		videoIds = append(videoIds, fmt.Sprintf("('%s', '%s')", data.Query, i.Id))
+	}
+	if len(videoIds) == 0 {
+		return false, err
 	}
 	//Связываем видосы с запросом в таблице истории
 	_, err = tx.Exec(fmt.Sprintf("INSERT IGNORE INTO query_to_video(query, video_id) VALUES %s", strings.Join(videoIds, ",")))
 	if err != nil {
+		logger.Log.Error("database.video.saveVideos - insert data to query_to_video:" + err.Error())
 		return false, err
 	}
 
@@ -90,7 +106,17 @@ func (r *Repository) saveVideos(tx *sqlx.Tx, videos []models.Video) error {
 	query := fmt.Sprintf(`INSERT IGNORE INTO video(id, name, url, img)	VALUES %s`, strings.Join(valuesQuery, ","))
 	_, err := tx.Exec(query, valuesArgs...)
 	if err != nil {
+		logger.Log.Error("database.video.saveVideos - insert new videos:" + err.Error())
 		return errors.Wrap(err, "adding videos to db")
 	}
 	return nil
+}
+
+func (r *Repository) DeleteVideoById(id string) (bool, error) {
+	_, err := r.db.Exec(fmt.Sprintf("DELETE FROM video WHERE id = '%s'", id))
+	if err != nil {
+		logger.Log.Error("database.video.deleteVideos:" + err.Error())
+		return false, err
+	}
+	return true, nil
 }
