@@ -9,7 +9,7 @@ import (
 )
 
 func ConfigRoutes(router *gin.Engine) *gin.Engine {
-	main := router.Group("api/v1")
+	main := router.Group("/")
 	{
 		videos := main.Group("videos")
 		{
