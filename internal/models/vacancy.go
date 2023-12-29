@@ -15,7 +15,7 @@ type Vacancy struct {
 
 type QueryVacancies struct {
 	Query       string    `json:"skill"`
-	VacancyList []Vacancy `json:"materials"`
+	VacancyList []Vacancy `json:"vacancies"`
 }
 
 type Salary struct {

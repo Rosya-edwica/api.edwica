@@ -22,13 +22,17 @@ func GetVacanciesFromTrudvsem(query string, limit int) ([]models.Vacancy, error)
 		if i >= limit && limit > 0 {
 			break
 		}
+		var cityAddress string
+		if len(item.Vacancy.Addressses.Address) > 0 {
+			cityAddress = item.Vacancy.Addressses.Address[0].Location
+		}
 		vacancies = append(vacancies, models.Vacancy{
 			Id:         item.Vacancy.Id,
 			Name:       item.Vacancy.Name,
 			Url:        item.Vacancy.Url,
 			Platform:   "trudvsem",
 			Currency:   tools.FilterCurrency(item.Vacancy.Currency),
-			City:       getTrudvsemCity(item.Vacancy.Addressses.Address[0].Location),
+			City:       getTrudvsemCity(cityAddress),
 			Skills:     []string{},
 			SalaryFrom: item.Vacancy.SalaryFrom,
 			SalaryTo:   item.Vacancy.SalaryTo,
