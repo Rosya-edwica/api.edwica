@@ -17,6 +17,7 @@ import (
 
 	"github.com/Rosya-edwica/api.edwica/internal/database"
 	"github.com/Rosya-edwica/api.edwica/internal/database/video"
+	"github.com/Rosya-edwica/api.edwica/internal/models"
 	"github.com/Rosya-edwica/api.edwica/pkg/logger"
 	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 	"github.com/gin-gonic/gin"
@@ -24,15 +25,15 @@ import (
 
 const DefaultLimit = 3
 
+var VideoCache = map[string][]models.Video{}
+
 func GetVideos(c *gin.Context) {
+	var response []models.QueryVideos
 	db := database.GetDB()
 	r := video.NewRepository(db)
-	queryList := tools.UniqueSlice(c.QueryArray("text"))
-	limit, err := strconv.Atoi(c.Query("count"))
-	if err != nil || limit == 0 {
-		limit = DefaultLimit
-	}
-	response, notFounded, _ := GetVideosFromDB(queryList, limit, r)
+	queryList, limit := valideVideoParams(c)
+	cacheResponse, notFounded := checkNewQueriesInCache(tools.UniqueSlice(queryList))
+	response, notFounded, _ = GetVideosFromDB(notFounded, limit, r)
 
 	if len(notFounded) > 0 {
 		newVideos, _ := GetUndiscoveredVideos(notFounded, limit)
@@ -42,9 +43,33 @@ func GetVideos(c *gin.Context) {
 		}
 		response = append(response, newVideos...)
 	}
+
+	response = append(response, cacheResponse...)
 	if response == nil {
 		c.JSON(207, "Not found")
 	} else {
 		c.JSON(200, response)
 	}
+}
+
+func valideVideoParams(c *gin.Context) (queryList []string, limit int) {
+	queryList = c.QueryArray("text")
+	limit, err := strconv.Atoi(c.Query("count"))
+	if err != nil || limit == 0 {
+		limit = DefaultLimit
+	}
+	return
+}
+
+func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryVideos, notFoundedInCache []string) {
+	for _, query := range items {
+		if val, ok := VideoCache[query]; ok {
+			fmt.Println("Ура, в кэше есть: ", query)
+			cacheResponse = append(cacheResponse, models.QueryVideos{Query: query, VideoList: val})
+		} else {
+			fmt.Println("В кэше нет: ", query)
+			notFoundedInCache = append(notFoundedInCache, query)
+		}
+	}
+	return cacheResponse, notFoundedInCache
 }

@@ -38,6 +38,8 @@ func GetUndiscoveredVideos(queryList []string, limit int) (response []models.Que
 					Query:     query,
 					VideoList: videos,
 				})
+				VideoCache[query] = videos
+
 			}
 		}(query)
 	}

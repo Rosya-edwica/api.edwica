@@ -17,14 +17,24 @@ import (
 
 const DefaultLimit = 3
 
-func GetBooks(c *gin.Context) {
-	var (
-		response []models.QueryBooks
-	)
-	db := database.GetDB()
-	r := book.NewRepository(db)
+var BookCache = map[string][]models.Book{}
 
-	queryList := c.QueryArray("text")
+func GetBooks(c *gin.Context) {
+	var response []models.QueryBooks
+	r := book.NewRepository(database.GetDB())
+	queryList, limit := valideBookParams(c)
+
+	cacheResponse, notFounded := checkNewQueriesInCache(tools.UniqueSlice(queryList))
+	response, notFounded, _ = collectBooksFromHistory(r, notFounded, limit)
+	newBooks, errors := collectNotFoundedBooks(r, notFounded, limit)
+	response = append(response, newBooks...)
+	errors = append(errors, errors...)
+	response = append(response, cacheResponse...)
+	c.JSON(200, response)
+}
+
+func valideBookParams(c *gin.Context) (queryList []string, limit int) {
+	queryList = c.QueryArray("text")
 	if len(queryList) == 0 {
 		c.JSON(207, controllers.IncorrentParameters(c, "text"))
 		return
@@ -34,18 +44,20 @@ func GetBooks(c *gin.Context) {
 	if err != nil || limit == 0 {
 		limit = DefaultLimit
 	}
-	uniqueQueryList := tools.UniqueSlice(queryList)
-	response, notFounded, _ := collectBooksFromHistory(r, uniqueQueryList, limit)
-	// errMap := controllers.ErrorListHandler(c, errors)
-	// if errMap != nil {
-	// 	c.JSON(404, errMap)
-	// 	return
-	// }
+	return
+}
 
-	newBooks, errors := collectNotFoundedBooks(r, notFounded, limit)
-	response = append(response, newBooks...)
-	errors = append(errors, errors...)
-	c.JSON(200, response)
+func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryBooks, notFoundedInCache []string) {
+	for _, query := range items {
+		if val, ok := BookCache[query]; ok {
+			fmt.Println("Ура, в кэше есть: ", query)
+			cacheResponse = append(cacheResponse, models.QueryBooks{Query: query, BookList: val})
+		} else {
+			fmt.Println("В кэше нет: ", query)
+			notFoundedInCache = append(notFoundedInCache, query)
+		}
+	}
+	return cacheResponse, notFoundedInCache
 }
 
 func collectBooksFromHistory(r *book.Repository, queryList []string, limit int) (response []models.QueryBooks, notFounded []string, errors []error) {
@@ -62,10 +74,13 @@ func collectBooksFromHistory(r *book.Repository, queryList []string, limit int) 
 				return
 			}
 			if len(books) > 0 {
-				response = append(response, models.QueryBooks{
+				item := models.QueryBooks{
 					Query:    query,
 					BookList: books,
-				})
+				}
+				response = append(response, item)
+				BookCache[query] = books
+
 			} else {
 				fmt.Println("не найден:", query)
 				notFounded = append(notFounded, query)
@@ -107,6 +122,7 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, limit int) (
 				BookList: books,
 			}
 			response = append(response, data)
+			BookCache[query] = books
 			r.SaveBooks(data)
 
 		}(query)

@@ -25,6 +25,7 @@ func GetVideosFromDB(queryList []string, limit int, r *video.Repository) (respon
 					Query:     query,
 					VideoList: videos,
 				})
+				VideoCache[query] = videos
 			} else {
 				notFounded = append(notFounded, query)
 			}
