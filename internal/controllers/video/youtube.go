@@ -80,6 +80,7 @@ func getVideoByAPI(query string, limit int) (response models.QueryVideos, err er
 		Query:     query,
 		VideoList: videos,
 	}
+	VideoCache[query] = videos
 	return response, nil
 }
 

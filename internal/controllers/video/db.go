@@ -29,7 +29,6 @@ func GetVideosFromDB(queryList []string, limit int, r *video.Repository) (respon
 			} else {
 				notFounded = append(notFounded, query)
 			}
-
 		}(query)
 	}
 	wg.Wait()

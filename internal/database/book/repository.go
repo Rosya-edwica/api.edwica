@@ -38,7 +38,7 @@ func (r *Repository) GetByQuery(query string, limit int) ([]models.Book, error) 
 	year, image, url, currency, pages, is_audio
 	FROM book
 	INNER JOIN query_to_book ON book.id = query_to_book.book_id
-	WHERE LOWER(query_to_book.query) = ?
+	WHERE query_to_book.query = ?
 	`
 	if limit > 0 {
 		dbQuery = fmt.Sprintf("%s LIMIT %d", dbQuery, limit)
@@ -96,7 +96,7 @@ func (r *Repository) SaveBooks(data models.QueryBooks) (done bool, err error) {
 
 	var bookIds []string
 	for _, i := range data.BookList {
-		bookIds = append(bookIds, fmt.Sprintf("('%s', %d)", data.Query, i.Id))
+		bookIds = append(bookIds, fmt.Sprintf("('%s', %d)", strings.ToLower(data.Query), i.Id))
 	}
 	//Связываем книги с запросом в таблице истории
 	_, err = tx.Exec(fmt.Sprintf("INSERT INTO query_to_book(query, book_id) VALUES %s", strings.Join(bookIds, ",")))

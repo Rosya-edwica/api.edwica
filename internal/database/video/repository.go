@@ -31,12 +31,11 @@ func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error)
 	dbQuery := `SELECT video.id as id, video.name as name, video.url as url, video.img as img
 	FROM video
 	INNER JOIN query_to_video ON video.id = query_to_video.video_id
-	WHERE LOWER(query_to_video.query) = ?`
+	WHERE query_to_video.query = ?`
 	if limit > 0 {
 		dbQuery = fmt.Sprintf("%s LIMIT %d", dbQuery, limit)
 	}
 	err := r.db.Select(&rawVideos, dbQuery, query)
-	fmt.Println(err)
 	if err != nil {
 		logger.Log.Error("database.video.getByQuery:" + err.Error())
 		return nil, errors.Wrap(err, "select video")
@@ -76,7 +75,7 @@ func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) 
 		if i.Id == "" {
 			continue
 		}
-		videoIds = append(videoIds, fmt.Sprintf("('%s', '%s')", data.Query, i.Id))
+		videoIds = append(videoIds, fmt.Sprintf("('%s', '%s')", strings.ToLower(data.Query), i.Id))
 	}
 	if len(videoIds) == 0 {
 		return false, err
