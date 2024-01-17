@@ -50,10 +50,8 @@ func valideBookParams(c *gin.Context) (queryList []string, limit int) {
 func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryBooks, notFoundedInCache []string) {
 	for _, query := range items {
 		if val, ok := BookCache[query]; ok {
-			fmt.Println("Ура, в кэше есть: ", query)
 			cacheResponse = append(cacheResponse, models.QueryBooks{Query: query, BookList: val})
 		} else {
-			fmt.Println("В кэше нет: ", query)
 			notFoundedInCache = append(notFoundedInCache, query)
 		}
 	}
