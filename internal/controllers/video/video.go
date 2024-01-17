@@ -36,7 +36,7 @@ func GetVideos(c *gin.Context) {
 	response, notFounded, _ = GetVideosFromDB(notFounded, limit, r)
 
 	if len(notFounded) > 0 {
-		newVideos, _ := GetUndiscoveredVideos(notFounded, limit)
+		newVideos, _ := GetUndiscoveredVideosByAPI(notFounded, limit)
 		for _, v := range newVideos {
 			done, err := r.SaveVideos(v)
 			logger.Log.Info(fmt.Sprintf("controllers.video.db: videos %s saving=%v err:%s", v.Query, done, err))
@@ -64,10 +64,8 @@ func valideVideoParams(c *gin.Context) (queryList []string, limit int) {
 func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryVideos, notFoundedInCache []string) {
 	for _, query := range items {
 		if val, ok := VideoCache[query]; ok {
-			fmt.Println("Ура, в кэше есть: ", query)
 			cacheResponse = append(cacheResponse, models.QueryVideos{Query: query, VideoList: val})
 		} else {
-			fmt.Println("В кэше нет: ", query)
 			notFoundedInCache = append(notFoundedInCache, query)
 		}
 	}

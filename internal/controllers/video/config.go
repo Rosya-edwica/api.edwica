@@ -19,3 +19,22 @@ type Youtube struct {
 		} `json:"contents"`
 	} `json:"itemSectionRenderer"`
 }
+
+type Response struct {
+	Videos []Video `json:"items"`
+}
+
+type Video struct {
+	Id struct {
+		VideoId string `json:"videoId"`
+	} `json:"id"`
+	Snippet Snippet `json:"snippet"`
+}
+type Snippet struct {
+	Title string `json:"title"`
+	Image struct {
+		Default struct {
+			Url string `json:"url"`
+		} `json:"default"`
+	} `json:"thumbnails"`
+}

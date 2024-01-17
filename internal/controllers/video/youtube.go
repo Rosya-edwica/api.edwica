@@ -10,7 +10,9 @@ package video
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,6 +22,66 @@ import (
 	"github.com/Rosya-edwica/api.edwica/internal/models"
 	"github.com/go-faster/errors"
 )
+
+func GetUndiscoveredVideosByAPI(queryList []string, limit int) (response []models.QueryVideos, errors []error) {
+	wg := sync.WaitGroup{}
+	wg.Add(len(queryList))
+
+	for _, i := range queryList {
+		go func(query string) {
+			defer wg.Done()
+			data, err := getVideoByAPI(query, limit)
+			if err != nil {
+				errors = append(errors, err)
+				return
+			}
+			response = append(response, data)
+		}(i)
+	}
+	wg.Wait()
+	return
+}
+
+func getVideoByAPI(query string, limit int) (response models.QueryVideos, err error) {
+	baseURL := "https://www.googleapis.com/youtube/v3/search"
+	baseVideoURL := "https://www.youtube.com/watch?v"
+	params := url.Values{}
+	params.Add("part", "snippet")
+	params.Add("q", "python")                                    // замените на ваш поисковый запрос
+	params.Add("key", "AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc") // замените на ваш API ключ
+	params.Add("maxResults", "10")
+	params.Add("regionCode", "RU")
+	params.Add("type", "video")
+	resp, err := http.Get(fmt.Sprintf("%s?%s", baseURL, params.Encode()))
+	if err != nil {
+		return models.QueryVideos{}, errors.Wrap(err, "select video by api")
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return models.QueryVideos{}, errors.Wrap(err, "read body youtube api")
+	}
+	var (
+		data   Response
+		videos []models.Video
+	)
+	json.Unmarshal(body, &data)
+
+	for _, i := range data.Videos {
+		videos = append(videos, models.Video{
+			Id:    i.Id.VideoId,
+			Name:  i.Snippet.Title,
+			Image: i.Snippet.Image.Default.Url,
+			Url:   fmt.Sprintf("%s=%s", baseVideoURL, i.Id.VideoId),
+		})
+	}
+	response = models.QueryVideos{
+		Query:     query,
+		VideoList: videos,
+	}
+	return response, nil
+}
 
 func GetUndiscoveredVideos(queryList []string, limit int) (response []models.QueryVideos, errors []error) {
 	wg := sync.WaitGroup{}
