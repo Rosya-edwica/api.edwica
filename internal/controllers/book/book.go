@@ -18,6 +18,7 @@ import (
 const DefaultLimit = 3
 
 var BookCache = map[string][]models.Book{}
+var BookCacheMutex = sync.RWMutex{}
 
 func GetBooks(c *gin.Context) {
 	var response []models.QueryBooks
@@ -49,11 +50,13 @@ func valideBookParams(c *gin.Context) (queryList []string, limit int) {
 
 func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryBooks, notFoundedInCache []string) {
 	for _, query := range items {
+		BookCacheMutex.RLock()
 		if val, ok := BookCache[query]; ok {
 			cacheResponse = append(cacheResponse, models.QueryBooks{Query: query, BookList: val})
 		} else {
 			notFoundedInCache = append(notFoundedInCache, query)
 		}
+		BookCacheMutex.RUnlock()
 	}
 	return cacheResponse, notFoundedInCache
 }
@@ -77,8 +80,9 @@ func collectBooksFromHistory(r *book.Repository, queryList []string, limit int) 
 					BookList: books,
 				}
 				response = append(response, item)
+				BookCacheMutex.Lock()
 				BookCache[query] = books
-
+				BookCacheMutex.Unlock()
 			} else {
 				fmt.Println("не найден:", query)
 				notFounded = append(notFounded, query)
@@ -120,7 +124,9 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, limit int) (
 				BookList: books,
 			}
 			response = append(response, data)
+			BookCacheMutex.Lock()
 			BookCache[query] = books
+			BookCacheMutex.Unlock()
 			r.SaveBooks(data)
 
 		}(query)

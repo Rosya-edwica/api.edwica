@@ -80,7 +80,9 @@ func getVideoByAPI(query string, limit int) (response models.QueryVideos, err er
 		Query:     query,
 		VideoList: videos,
 	}
+	VideoCacheMutex.Lock()
 	VideoCache[query] = videos
+	VideoCacheMutex.Unlock()
 	return response, nil
 }
 
@@ -101,7 +103,9 @@ func GetUndiscoveredVideos(queryList []string, limit int) (response []models.Que
 					Query:     query,
 					VideoList: videos,
 				})
+				VideoCacheMutex.Lock()
 				VideoCache[query] = videos
+				VideoCacheMutex.Unlock()
 
 			}
 		}(query)

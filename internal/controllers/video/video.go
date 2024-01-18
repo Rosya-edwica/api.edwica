@@ -14,6 +14,7 @@ package video
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/Rosya-edwica/api.edwica/internal/database"
 	"github.com/Rosya-edwica/api.edwica/internal/database/video"
@@ -26,6 +27,7 @@ import (
 const DefaultLimit = 3
 
 var VideoCache = map[string][]models.Video{}
+var VideoCacheMutex = sync.RWMutex{}
 
 func GetVideos(c *gin.Context) {
 	var response []models.QueryVideos
@@ -63,11 +65,13 @@ func valideVideoParams(c *gin.Context) (queryList []string, limit int) {
 
 func checkNewQueriesInCache(items []string) (cacheResponse []models.QueryVideos, notFoundedInCache []string) {
 	for _, query := range items {
+		VideoCacheMutex.RLock()
 		if val, ok := VideoCache[query]; ok {
 			cacheResponse = append(cacheResponse, models.QueryVideos{Query: query, VideoList: val})
 		} else {
 			notFoundedInCache = append(notFoundedInCache, query)
 		}
+		VideoCacheMutex.RUnlock()
 	}
 	return cacheResponse, notFoundedInCache
 }

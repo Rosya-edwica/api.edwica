@@ -25,7 +25,9 @@ func GetVideosFromDB(queryList []string, limit int, r *video.Repository) (respon
 					Query:     query,
 					VideoList: videos,
 				})
+				VideoCacheMutex.Lock()
 				VideoCache[query] = videos
+				VideoCacheMutex.Unlock()
 			} else {
 				notFounded = append(notFounded, query)
 			}
