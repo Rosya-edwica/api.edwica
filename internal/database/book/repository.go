@@ -82,6 +82,10 @@ func (r *Repository) GetByName(query, subdomain string) ([]models.Book, error) {
 		logger.Log.Error("database.book.getByName:" + err.Error())
 		return nil, errors.Wrap(err, "select book by name")
 	}
+	// Если не нашли книги по поддомену, то ищем книги без привязки к домену
+	if len(rawBooks) == 0 {
+		return r.GetByName(query, "")
+	}
 	return models.NewBooks(rawBooks), nil
 }
 
