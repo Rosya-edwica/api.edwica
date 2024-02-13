@@ -47,8 +47,8 @@ func getVideoByAPI(query string, limit int) (response models.QueryVideos, err er
 	baseVideoURL := "https://www.youtube.com/watch?v"
 	params := url.Values{}
 	params.Add("part", "snippet")
-	params.Add("q", "python")                                    // замените на ваш поисковый запрос
-	params.Add("key", "AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc") // замените на ваш API ключ
+	params.Add("q", query)
+	params.Add("key", "AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc")
 	params.Add("maxResults", "10")
 	params.Add("regionCode", "RU")
 	params.Add("type", "video")
