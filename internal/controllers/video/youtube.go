@@ -23,6 +23,13 @@ import (
 	"github.com/go-faster/errors"
 )
 
+var YoutubeKeys = []string{
+	"AIzaSyB1NKijqSEF-PEZhl80iUKJOC211o-ebnI",
+	"AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc",
+	"AIzaSyAxZBqP7EbIdwL6TarxkGI-1SMnOR-K4D8",
+}
+var validKey string = YoutubeKeys[0]
+
 func GetUndiscoveredVideosByAPI(queryList []string, limit int) (response []models.QueryVideos, errors []error) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(queryList))
@@ -30,7 +37,7 @@ func GetUndiscoveredVideosByAPI(queryList []string, limit int) (response []model
 	for _, i := range queryList {
 		go func(query string) {
 			defer wg.Done()
-			data, err := getVideoByAPI(query, limit)
+			data, err := getVideoByAPI(query, limit, validKey)
 			if err != nil {
 				errors = append(errors, err)
 				return
@@ -42,22 +49,31 @@ func GetUndiscoveredVideosByAPI(queryList []string, limit int) (response []model
 	return
 }
 
-func getVideoByAPI(query string, limit int) (response models.QueryVideos, err error) {
+func getVideoByAPI(query string, limit int, apiKey string) (response models.QueryVideos, err error) {
 	baseURL := "https://www.googleapis.com/youtube/v3/search"
 	baseVideoURL := "https://www.youtube.com/watch?v"
 	params := url.Values{}
 	params.Add("part", "snippet")
 	params.Add("q", query)
-	params.Add("key", "AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc")
+	params.Add("key", apiKey)
 	params.Add("maxResults", "10")
 	params.Add("regionCode", "RU")
 	params.Add("type", "video")
+	fmt.Println(params.Get("key"))
 	resp, err := http.Get(fmt.Sprintf("%s?%s", baseURL, params.Encode()))
 	if err != nil {
 		return models.QueryVideos{}, errors.Wrap(err, "select video by api")
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode == 403 {
+		for _, key := range YoutubeKeys {
+			if key != apiKey {
+				return getVideoByAPI(query, limit, key)
+			}
+		}
+		return models.QueryVideos{}, errors.Wrap(err, "limit apiKEY today")
+	}
+	validKey = apiKey
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return models.QueryVideos{}, errors.Wrap(err, "read body youtube api")
