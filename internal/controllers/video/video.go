@@ -28,6 +28,13 @@ const DefaultLimit = 3
 
 var VideoCache = map[string][]models.Video{}
 var VideoCacheMutex = sync.RWMutex{}
+var YoutubeKeys = []string{
+	"AIzaSyB1NKijqSEF-PEZhl80iUKJOC211o-ebnI",
+	"AIzaSyCB_uQD2jnxPzYqSR92CtSpTwpHhUYv0Uc",
+	"AIzaSyAxZBqP7EbIdwL6TarxkGI-1SMnOR-K4D8",
+	"AIzaSyB5iV28jXxRmvFYQ1aSYBKQDptdm9D2BtI",
+}
+var validKey string = YoutubeKeys[0]
 
 func GetVideos(c *gin.Context) {
 	var response []models.QueryVideos
@@ -38,7 +45,16 @@ func GetVideos(c *gin.Context) {
 	response, notFounded, _ = GetVideosFromDB(notFounded, limit, r)
 
 	if len(notFounded) > 0 {
-		newVideos, _ := GetUndiscoveredVideosByAPI(notFounded, limit)
+
+		newVideos, _ := GetUndiscoveredVideosByAPI(notFounded, limit, validKey)
+		if len(newVideos) == 0 {
+			for _, key := range YoutubeKeys {
+				newVideos, _ = GetUndiscoveredVideosByAPI(notFounded, limit, key)
+				if len(newVideos) > 1 {
+					break
+				}
+			}
+		}
 		for _, v := range newVideos {
 			done, err := r.SaveVideos(v)
 			logger.Log.Info(fmt.Sprintf("controllers.video.db: videos %s saving=%v err:%s", v.Query, done, err))
