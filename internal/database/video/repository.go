@@ -28,7 +28,8 @@ func NewRepository(db *sqlx.DB) *Repository {
 
 func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error) {
 	rawVideos := make([]entities.Video, 0)
-	dbQuery := `SELECT video.id as id, video.name as name, video.url as url, video.img as img
+	// Намерено делаю поле img пустым, так как оно не используется в АПИ, но в таблице влияет на уникальность данных (у некоторых видео разные картинки по размеру)
+	dbQuery := `SELECT DISTINCT video.id as id, video.name as name, video.url as url, '' as img
 	FROM video
 	INNER JOIN query_to_video ON video.id = query_to_video.video_id
 	WHERE query_to_video.query = ?`
