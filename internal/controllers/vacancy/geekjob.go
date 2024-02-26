@@ -13,15 +13,25 @@ import (
 	"github.com/gocolly/colly"
 )
 
-func GetVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, error) {
-	url := "https://geekjob.ru/json/find/vacancy?qs=" + query
-	resp, _ := DecondeJsonResponse(url, nil, &GeekJob{}, "GET")
-	data := resp.(*GeekJob)
+const geekjobAPIUrl = "https://geekjob.ru/json/find/vacancy?qs="
+const geekjobUrl = "https://geekjob.ru/vacancy/"
+
+// CollectVacanciesFromGeekjob парсинг сайта занятости geekjob.ru (тут только IT вакансии)
+func CollectVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, error) {
+	// Пытаемся получить JSON в структуре GeekJob
+	response, err := DecodeJsonResponse(geekjobAPIUrl+query, nil, &GeekJob{}, "GET")
+	if response == nil || err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("На geekjob.ru ничего не нашлось по запросу: '%s'", query))
+	}
+	data := response.(*GeekJob)
+
 	var (
-		vacancies      = []models.Vacancy{}
-		wg             sync.WaitGroup
 		countVacancies int
+		vacancies      []models.Vacancy
+		wg             sync.WaitGroup
 	)
+
+	// Пытаемся определить сколько вакансий нам нужно распарсить
 	if limit > 0 && len(data.Items) >= limit {
 		countVacancies = limit
 	} else if limit == 0 && len(data.Items) >= defaultLimit {
@@ -29,46 +39,61 @@ func GetVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, error) 
 	} else {
 		countVacancies = len(data.Items)
 	}
-	fmt.Println(countVacancies)
-	wg.Add(countVacancies)
 
+	// Запускаем горутины, которые по отдельности будут парсить вакансии с geekjob
+	wg.Add(countVacancies)
+	errc := make(chan error)
 	for _, item := range data.Items[:countVacancies] {
 		go func(item GeekJobItem) {
 			defer wg.Done()
-			vacancy, _ := ParseGeekjobVacancyById(item.Id)
-			vacancies = append(vacancies, vacancy)
+			vacancy, err := parseGeekjobSiteByVacancyId(item.Id)
+			if err != nil {
+				errc <- err
+			} else {
+				vacancies = append(vacancies, vacancy)
+			}
 		}(item)
 	}
 	wg.Wait()
-	return vacancies, nil
+	close(errc)
+	// Если что-то смогли спарсить, значит отправляем все, что есть
+	if len(vacancies) > 0 {
+		return vacancies, nil
+	}
+	// Если ничего не смогли спарсить, значит где-то была ошибка, которую можно показать пользователю
+	for err := range errc {
+		return nil, errors.Wrap(err, "Ошибка при парсинге вакансий с geekjob")
+	}
+	// Ошибок не было и вакансий тоже
+	return nil, nil
 }
 
-func ParseGeekjobVacancyById(id string) (models.Vacancy, error) {
-	var vacancy models.Vacancy
-	url := "https://geekjob.ru/vacancy/" + id
-	html, err := GetHTMLBody(url)
+// Парсим HTML сайта по id вакансии
+func parseGeekjobSiteByVacancyId(id string) (vacancy models.Vacancy, err error) {
+	vacancy.Id = id
+	vacancy.Url = geekjobUrl + vacancy.Id
+	// Пытаемся получить HTML для парсинга с помощью colly
+	html, err := getBodyHTML(vacancy.Url)
 	if err != nil {
-		return models.Vacancy{}, errors.Wrap(err, "html content geekjob vacancy by url: "+url)
+		return models.Vacancy{}, errors.Wrap(err, fmt.Sprintf("Не удалось получить HTML страницы: %s", vacancy.Url))
 	}
 	vacancy.Name = getTitle(html)
 	if vacancy.Name == "" {
-		return models.Vacancy{}, nil
+		// Проверяем смогли ли мы получить текст с HTML
+		return models.Vacancy{}, errors.Wrap(err, fmt.Sprintf("Ошибка при чтении HTML страницы: %s", vacancy.Url))
 	}
-	vacancy.Url = url
-	vacancy.Id = id
-	vacancy.Platform = "geekjob"
 
-	vacancy.City = html.ChildText("div.location")
+	vacancy.Platform = "geekjob"
 	salary := getSalary(html)
 	vacancy.SalaryFrom = salary.From
 	vacancy.SalaryTo = salary.To
 	vacancy.Currency = tools.FilterCurrency(salary.Currency)
 	vacancy.Skills = getSkills(html)
-
+	vacancy.City = html.ChildText("div.location")
 	return vacancy, nil
 }
 
-func GetHTMLBody(url string) (*colly.HTMLElement, error) {
+func getBodyHTML(url string) (*colly.HTMLElement, error) {
 	c := colly.NewCollector()
 
 	var body *colly.HTMLElement
@@ -138,6 +163,7 @@ func removeAreasFromSkills(skills []string) (updated []string) {
 	return
 }
 
+// checkSkillIsArea Проверяем, что не забираем профобласть вместе с навыками
 func checkSkillIsArea(skill string) bool {
 	areas := []string{
 		"Торговля и общепит",

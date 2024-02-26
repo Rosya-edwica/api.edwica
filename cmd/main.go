@@ -28,6 +28,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	server := server.NewServer(httpConfig)
-	server.Run()
+	s := server.NewServer(httpConfig)
+	s.Run()
 }

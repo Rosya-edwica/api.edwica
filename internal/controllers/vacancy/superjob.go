@@ -1,30 +1,52 @@
 package vacancy
 
 import (
-	"errors"
+	"fmt"
+	"github.com/Rosya-edwica/api.edwica/pkg/logger"
+	"github.com/go-faster/errors"
 	"net/url"
 	"strconv"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
-	"github.com/Rosya-edwica/api.edwica/pkg/logger"
 	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 )
 
-func GetVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
-	url := createSuperjobRequestUrl(query, limit)
+// CollectVacanciesFromSuperjob главная функция, которая вызывает вспомогательную функцию для парсинга вакансий superjob
+func CollectVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
+	return collectVacanciesFromSuperjobWithRetries(query, limit, 3)
+
+}
+
+// collectVacanciesFromSuperjobWithRetries вспомогательная функция, которая будет несколько раз пробовать обновить
+// токен superjob.
+func collectVacanciesFromSuperjobWithRetries(query string, limit, retries int) ([]models.Vacancy, error) {
+	for i := 0; i < retries; i++ {
+		vacancies, err := collectVacanciesFromSuperjob(query, limit)
+		if err != nil {
+			err = updateSuperjobToken()
+			if err != nil {
+				return nil, errors.Wrap(err, "Не смогли подключиться к superjob. Переподключение не помогло.")
+			}
+		} else {
+			return vacancies, nil
+		}
+	}
+	return nil, nil
+}
+
+// collectVacanciesFromSuperjob логика парсинга superjob
+func collectVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
+	requestUrl := buildSuperjobRequestUrl(query, limit)
 	headers, err := GetMapSuperjobHeaders()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Ошибка при создании запроса к superjob")
 	}
-	resp, status := DecondeJsonResponse(url, headers, &Superjob{}, "GET")
-	if status != 200 {
-		logger.Log.Warning("Пытаемся обновить токен SuperJob")
-		err = UpdateSuperjobToken()
-		if err != nil {
-			logger.Log.Error("Не смогли обновить токен! " + err.Error())
-		}
-		logger.Log.Info("Пытаемся снова выполнить запрос с новым токеном")
-		return GetVacanciesFromSuperjob(query, limit)
+	resp, err := DecodeJsonResponse(requestUrl, headers, &Superjob{}, "GET")
+	if resp == nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("На superjob.ru ничего не нашлось по запросу: '%s'", query))
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "Проблемы с superjob (обновление токена не помогает)")
 	}
 	data := resp.(*Superjob)
 	var vacancies []models.Vacancy
@@ -42,10 +64,12 @@ func GetVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error)
 			Company:    item.Company,
 		})
 	}
-
 	return vacancies, nil
+
 }
-func createSuperjobRequestUrl(query string, limit int) string {
+
+// buildSuperjobRequestUrl собираем ссылку вместе с необходимыми параметрами для успешного GET-запроса к API Superjob
+func buildSuperjobRequestUrl(query string, limit int) string {
 	params := url.Values{}
 	params.Add("count", strconv.Itoa(limit))
 	params.Add("keywords[0][srws]", "1")          // Поиск по названию
@@ -54,7 +78,8 @@ func createSuperjobRequestUrl(query string, limit int) string {
 	return "https://api.superjob.ru/2.0/vacancies/?" + params.Encode()
 }
 
-func createSuperjobUpdateTokenUrl() (string, error) {
+// buildSuperjobUpdateTokenUrl собираем ссылку вместе с необходимыми параметрами для успешного обновления токена API Superjob
+func buildSuperjobUpdateTokenUrl() (string, error) {
 	headers, err := GetSuperjobHeaders()
 	if err != nil {
 		return "", err
@@ -67,16 +92,21 @@ func createSuperjobUpdateTokenUrl() (string, error) {
 
 }
 
-func UpdateSuperjobToken() error {
-	refreshUrl, err := createSuperjobUpdateTokenUrl()
+// updateSuperjobToken логика обновления токена
+func updateSuperjobToken() error {
+	logger.Log.Info("Пробуем обновить токен superjob...")
+	refreshUrl, err := buildSuperjobUpdateTokenUrl()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Не удалось создать ссылку для обновления токена")
 	}
-	resp, status := DecondeJsonResponse(refreshUrl, nil, &SuperjobToken{}, "POST")
-	if status != 200 {
-		return errors.New("cant connect to superjob")
+	resp, err := DecodeJsonResponse(refreshUrl, nil, &SuperjobToken{}, "POST")
+	if err != nil {
+		return errors.Wrap(err, "Не смогли распарсить токен в структуру SuperjobToken")
 	}
 	data := resp.(*SuperjobToken)
-	setNewSuperjobTokenToConfig(data.AccessToken)
+	err = setNewSuperjobTokenToConfig(data.AccessToken)
+	if err != nil {
+		return errors.Wrap(err, "Ошибка при обновлении токена в конфиг-файле")
+	}
 	return nil
 }
