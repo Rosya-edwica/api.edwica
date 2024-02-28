@@ -13,15 +13,15 @@ import (
 
 // CollectVacanciesFromSuperjob главная функция, которая вызывает вспомогательную функцию для парсинга вакансий superjob
 func CollectVacanciesFromSuperjob(query models.VacancyQuery) ([]models.Vacancy, error) {
-	return collectVacanciesFromSuperjobWithRetries(query.Query, query.Limit, 3)
+	return collectVacanciesFromSuperjobWithRetries(query, 3)
 
 }
 
 // collectVacanciesFromSuperjobWithRetries вспомогательная функция, которая будет несколько раз пробовать обновить
 // токен superjob.
-func collectVacanciesFromSuperjobWithRetries(query string, limit, retries int) ([]models.Vacancy, error) {
+func collectVacanciesFromSuperjobWithRetries(query models.VacancyQuery, retries int) ([]models.Vacancy, error) {
 	for i := 0; i < retries; i++ {
-		vacancies, err := collectVacanciesFromSuperjob(query, limit)
+		vacancies, err := collectVacanciesFromSuperjob(query)
 		if err != nil {
 			err = updateSuperjobToken()
 			if err != nil {
@@ -35,8 +35,8 @@ func collectVacanciesFromSuperjobWithRetries(query string, limit, retries int) (
 }
 
 // collectVacanciesFromSuperjob логика парсинга superjob
-func collectVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
-	requestUrl := buildSuperjobRequestUrl(query, limit)
+func collectVacanciesFromSuperjob(query models.VacancyQuery) ([]models.Vacancy, error) {
+	requestUrl := buildSuperjobRequestUrl(query)
 	headers, err := GetMapSuperjobHeaders()
 	if err != nil {
 		return nil, errors.Wrap(err, "Ошибка при создании запроса к superjob")
@@ -69,12 +69,15 @@ func collectVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, er
 }
 
 // buildSuperjobRequestUrl собираем ссылку вместе с необходимыми параметрами для успешного GET-запроса к API Superjob
-func buildSuperjobRequestUrl(query string, limit int) string {
+func buildSuperjobRequestUrl(query models.VacancyQuery) string {
 	params := url.Values{}
-	params.Add("count", strconv.Itoa(limit))
+	params.Add("count", strconv.Itoa(query.Limit))
 	params.Add("keywords[0][srws]", "1")          // Поиск по названию
 	params.Add("keywords[0][skwc]", "particular") // Поиск точной фразы
-	params.Add("keywords[0][keys]", query)        // Запрос
+	params.Add("keywords[0][keys]", query.Query)  // Запрос
+	if query.City != "0" {
+		params.Add("town", query.City)
+	}
 	return "https://api.superjob.ru/2.0/vacancies/?" + params.Encode()
 }
 

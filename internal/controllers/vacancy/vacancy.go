@@ -31,7 +31,7 @@ func GetVacancies(c *gin.Context) {
 	regionCode, _ := strconv.Atoi(c.Query("region"))
 	params := models.VacancyParams{
 		Texts:      tools.UniqueSlice(c.QueryArray("text")),
-		City:       "",
+		City:       c.Query("city"),
 		Platform:   c.Query("platform"),
 		RegionCode: regionCode,
 		Limit:      limit,

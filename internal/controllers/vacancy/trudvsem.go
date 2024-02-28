@@ -21,7 +21,6 @@ func CollectVacanciesFromTrudvsem(query models.VacancyQuery) ([]models.Vacancy, 
 	} else {
 		requestUrl = fmt.Sprintf("%s?text=%s", trudvsemUrl, url.PathEscape(query.Query))
 	}
-	fmt.Println(requestUrl)
 	response, err := DecodeJsonResponse(requestUrl, nil, &Trudvsem{}, "GET")
 	if response == nil || err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("На trudvsem.ru ничего не нашлось по запросу: '%s'", query))
