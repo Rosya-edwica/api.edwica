@@ -5,6 +5,7 @@ import (
 	"github.com/go-faster/errors"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/Rosya-edwica/api.edwica/internal/models"
 	"github.com/Rosya-edwica/api.edwica/pkg/tools"
@@ -55,10 +56,13 @@ func CollectVacanciesFromTrudvsem(query models.VacancyQuery) ([]models.Vacancy, 
 // parseTrudvsemCity с помощью регулярок пытаемся вытащить город из полного адреса
 func parseTrudvsemCity(text string) string {
 	var (
-		reCity    = regexp.MustCompile(`г. .*?`)
-		reSubCity = regexp.MustCompile(`г. `)
+		reCity    = regexp.MustCompile(`г. .*?|,.*?район|г .*?,`)
+		reSubCity = regexp.MustCompile(`г. |, |г |,`)
 	)
-	city := reCity.FindString(text)
+	city := reCity.FindString(strings.ToLower(text))
 	city = reSubCity.ReplaceAllString(city, "")
-	return city
+	if city == "" {
+		return text
+	}
+	return strings.Title(city)
 }
