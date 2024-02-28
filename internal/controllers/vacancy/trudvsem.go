@@ -10,12 +10,19 @@ import (
 	"github.com/Rosya-edwica/api.edwica/pkg/tools"
 )
 
-const trudvsemUrl = "http://opendata.trudvsem.ru/api/v1/vacancies/?text="
+const trudvsemUrl = "http://opendata.trudvsem.ru/api/v1/vacancies"
 
 // CollectVacanciesFromTrudvsem парсинг сайта занятости trudvsem.ru (Работа России)
-func CollectVacanciesFromTrudvsem(query string, limit int) ([]models.Vacancy, error) {
+func CollectVacanciesFromTrudvsem(query models.VacancyQuery) ([]models.Vacancy, error) {
 	// Пытаемся получить JSON в структуре Trudvsem
-	response, err := DecodeJsonResponse(trudvsemUrl+url.PathEscape(query), nil, &Trudvsem{}, "GET")
+	var requestUrl string
+	if query.RegionCode != 0 {
+		requestUrl = fmt.Sprintf("%s/region/%d/?text=%s", trudvsemUrl, query.RegionCode, url.PathEscape(query.Query))
+	} else {
+		requestUrl = fmt.Sprintf("%s?text=%s", trudvsemUrl, url.PathEscape(query.Query))
+	}
+	fmt.Println(requestUrl)
+	response, err := DecodeJsonResponse(requestUrl, nil, &Trudvsem{}, "GET")
 	if response == nil || err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("На trudvsem.ru ничего не нашлось по запросу: '%s'", query))
 	}
@@ -24,7 +31,7 @@ func CollectVacanciesFromTrudvsem(query string, limit int) ([]models.Vacancy, er
 	// Распарсим структуру Trudvsem в список вакансий
 	var vacancies []models.Vacancy
 	for i, item := range data.Results.Vacancies {
-		if i >= limit && limit > 0 {
+		if i >= query.Limit && query.Limit > 0 {
 			break
 		}
 		// Пытаемся распарсить город из полного адреса

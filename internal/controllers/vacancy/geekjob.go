@@ -17,9 +17,9 @@ const geekjobAPIUrl = "https://geekjob.ru/json/find/vacancy?qs="
 const geekjobUrl = "https://geekjob.ru/vacancy/"
 
 // CollectVacanciesFromGeekjob парсинг сайта занятости geekjob.ru (тут только IT вакансии)
-func CollectVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, error) {
+func CollectVacanciesFromGeekjob(query models.VacancyQuery) ([]models.Vacancy, error) {
 	// Пытаемся получить JSON в структуре GeekJob
-	response, err := DecodeJsonResponse(geekjobAPIUrl+query, nil, &GeekJob{}, "GET")
+	response, err := DecodeJsonResponse(geekjobAPIUrl+query.Query, nil, &GeekJob{}, "GET")
 	if response == nil || err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("На geekjob.ru ничего не нашлось по запросу: '%s'", query))
 	}
@@ -32,9 +32,9 @@ func CollectVacanciesFromGeekjob(query string, limit int) ([]models.Vacancy, err
 	)
 
 	// Пытаемся определить сколько вакансий нам нужно распарсить
-	if limit > 0 && len(data.Items) >= limit {
-		countVacancies = limit
-	} else if limit == 0 && len(data.Items) >= defaultLimit {
+	if query.Limit > 0 && len(data.Items) >= query.Limit {
+		countVacancies = query.Limit
+	} else if query.Limit == 0 && len(data.Items) >= defaultLimit {
 		countVacancies = defaultLimit
 	} else {
 		countVacancies = len(data.Items)

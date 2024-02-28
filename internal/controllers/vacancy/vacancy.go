@@ -26,16 +26,30 @@ func GetVacancies(c *gin.Context) {
 		response []models.QueryVacancies // Ответ обработчика
 		wg       sync.WaitGroup
 	)
-	platform := c.Query("platform")                      // С какого сайта спарсить вакансии?
-	limit, _ := strconv.Atoi(c.Query("count"))           // Сколько максимум вакансий отдать?
-	queryList := tools.UniqueSlice(c.QueryArray("text")) // Что искать на сайтах занятости?
 
-	errc := make(chan error, len(queryList)) // Канал с ошибками
-	wg.Add(len(queryList))                   // Создаем горутины, количество которых будет равно количеству параметров text
-	for _, query := range queryList {
+	limit, _ := strconv.Atoi(c.Query("count"))
+	regionCode, _ := strconv.Atoi(c.Query("region"))
+	params := models.VacancyParams{
+		Texts:      tools.UniqueSlice(c.QueryArray("text")),
+		City:       "",
+		Platform:   c.Query("platform"),
+		RegionCode: regionCode,
+		Limit:      limit,
+	}
+
+	errc := make(chan error, len(params.Texts)) // Канал с ошибками
+	wg.Add(len(params.Texts))                   // Создаем горутины, количество которых будет равно количеству параметров text
+	for _, query := range params.Texts {
+		vacancyQuery := models.VacancyQuery{
+			Query:      query,
+			City:       params.City,
+			Platform:   params.Platform,
+			RegionCode: params.RegionCode,
+			Limit:      params.Limit,
+		}
 		go func(query string) {
 			defer wg.Done()
-			data, err := GetQueryVacancies(query, platform, limit)
+			data, err := GetQueryVacancies(vacancyQuery)
 			if err != nil {
 				fmt.Println("main err", err)
 				errc <- errors.Wrap(err, fmt.Sprintf("Для '%s' произошла ошибка", query))
@@ -62,53 +76,53 @@ func GetVacancies(c *gin.Context) {
 }
 
 // GetQueryVacancies "Маршрутизатор", который определяет с какого сайта нужно парсить данные
-func GetQueryVacancies(query string, platform string, limit int) (result models.QueryVacancies, err error) {
+func GetQueryVacancies(query models.VacancyQuery) (result models.QueryVacancies, err error) {
 	var vacancies []models.Vacancy
-	switch platform {
+	switch query.Platform {
 	case "trudvsem":
-		vacancies, err = CollectVacanciesFromTrudvsem(query, limit)
+		vacancies, err = CollectVacanciesFromTrudvsem(query)
 	case "superjob":
-		vacancies, err = CollectVacanciesFromSuperjob(query, limit)
+		vacancies, err = CollectVacanciesFromSuperjob(query)
 	case "geekjob":
-		vacancies, err = CollectVacanciesFromGeekjob(query, limit)
+		vacancies, err = CollectVacanciesFromGeekjob(query)
 	default:
-		vacancies, err = CollectVacancies(query, limit)
+		vacancies, err = CollectVacancies(query)
 	}
 	if len(vacancies) == 0 {
-		return models.QueryVacancies{Query: query, VacancyList: []models.Vacancy{}}, err
+		return models.QueryVacancies{Query: query.Query, VacancyList: []models.Vacancy{}}, err
 	}
-	return models.QueryVacancies{Query: query, VacancyList: vacancies}, err
+	return models.QueryVacancies{Query: query.Query, VacancyList: vacancies}, err
 }
 
 // CollectVacancies Собирает вакансии со всех источников в один список
-func CollectVacancies(query string, limit int) ([]models.Vacancy, error) {
+func CollectVacancies(query models.VacancyQuery) ([]models.Vacancy, error) {
 	var (
 		vacancies []models.Vacancy
 		wg        sync.WaitGroup
 	)
 	wg.Add(platformsCount)
 	errc := make(chan error, platformsCount)
-	go func(query string) {
+	go func(query models.VacancyQuery) {
 		defer wg.Done()
-		v, err := CollectVacanciesFromTrudvsem(query, limit)
+		v, err := CollectVacanciesFromTrudvsem(query)
 		if err != nil {
 			errc <- err
 		} else {
 			vacancies = append(vacancies, v...)
 		}
 	}(query)
-	go func(query string) {
+	go func(query models.VacancyQuery) {
 		defer wg.Done()
-		v, err := CollectVacanciesFromSuperjob(query, limit)
+		v, err := CollectVacanciesFromSuperjob(query)
 		if err != nil {
 			errc <- err
 		} else {
 			vacancies = append(vacancies, v...)
 		}
 	}(query)
-	go func(query string) {
+	go func(query models.VacancyQuery) {
 		defer wg.Done()
-		v, err := CollectVacanciesFromGeekjob(query, limit)
+		v, err := CollectVacanciesFromGeekjob(query)
 		if err != nil {
 			errc <- err
 		} else {

@@ -12,8 +12,8 @@ import (
 )
 
 // CollectVacanciesFromSuperjob главная функция, которая вызывает вспомогательную функцию для парсинга вакансий superjob
-func CollectVacanciesFromSuperjob(query string, limit int) ([]models.Vacancy, error) {
-	return collectVacanciesFromSuperjobWithRetries(query, limit, 3)
+func CollectVacanciesFromSuperjob(query models.VacancyQuery) ([]models.Vacancy, error) {
+	return collectVacanciesFromSuperjobWithRetries(query.Query, query.Limit, 3)
 
 }
 

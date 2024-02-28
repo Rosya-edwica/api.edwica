@@ -23,3 +23,19 @@ type Salary struct {
 	To       int
 	Currency string
 }
+
+type VacancyParams struct {
+	Texts      []string
+	City       string
+	Platform   string
+	RegionCode int
+	Limit      int
+}
+
+type VacancyQuery struct {
+	Query      string
+	City       string
+	Platform   string
+	RegionCode int
+	Limit      int
+}
