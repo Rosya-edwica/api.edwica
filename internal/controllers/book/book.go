@@ -2,6 +2,7 @@ package book
 
 import (
 	"fmt"
+	"github.com/go-faster/errors"
 	"strconv"
 	"sync"
 
@@ -23,43 +24,91 @@ const DefaultSubDomain = ""
 var BookCache = map[string][]models.Book{}
 var BookCacheMutex = sync.RWMutex{}
 
+// GetBooks Обработчик /books
 func GetBooks(c *gin.Context) {
 	var response []models.QueryBooks
-	r := book.NewRepository(database.GetDB())
-	queryList, subdomain, limit := valideBookParams(c)
+	params := valideBookParams(c)
 
-	cacheResponse, notFounded := checkNewQueriesInCache(tools.UniqueSlice(queryList), limit, subdomain)
-	response, notFounded, _ = collectBooksFromHistory(r, notFounded, subdomain, limit)
-	newBooks, errors := collectNotFoundedBooks(r, notFounded, subdomain, limit)
-	response = append(response, newBooks...)
-	errors = append(errors, errors...)
-	response = append(response, cacheResponse...)
-	fmt.Printf("limit:%d\tcount books:%d\n", limit, len(response[0].BookList))
+	response, notFounded := checkNewQueriesInCache(params)
+	params.Texts = notFounded
+	if params.Source == "" && len(params.Texts) != 0 {
+		litresResp, _ := findBooksInLitres(params)
+		response = append(response, litresResp...)
+	} else if params.Source != "" {
+		DBResp, _ := findBooksInHistory(params)
+		response = append(response, DBResp...)
+	}
 	c.JSON(200, response)
+
 }
 
-func valideBookParams(c *gin.Context) (queryList []string, subdomain string, limit int) {
-	queryList = c.QueryArray("text")
+func findBooksInLitres(params models.BookParams) (response []models.QueryBooks, err error) {
+	var wg sync.WaitGroup
+	wg.Add(len(params.Texts))
+	for _, i := range params.Texts {
+		go func(text string) {
+			defer wg.Done()
+			var res models.QueryBooks
+			res, err = SearchBooks(text, params.Limit)
+
+			response = append(response, res)
+			requestStr := createCacheRequestStr(text, params.Limit, params.Source)
+			addRequestToCache(requestStr, res.BookList)
+		}(i)
+	}
+	wg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	return
+}
+
+func findBooksInHistory(params models.BookParams) (result []models.QueryBooks, err error) {
+	r := book.NewRepository(database.GetDB())
+	response, notFounded, errList := collectBooksFromHistory(r, params)
+	if len(errList) != 0 {
+		return nil, errors.Wrap(errList[0], "Ошибка при чтении книг из истории запросов")
+	}
+	params.Texts = notFounded
+	newBooks, errList := collectNotFoundedBooks(r, params)
+	if len(errList) != 0 {
+		return nil, errors.Wrap(errList[0], "Ошибка при поиске книг в БД")
+	}
+	result = append(result, response...)
+	result = append(response, newBooks...)
+	if len(result) != 0 {
+		fmt.Printf("limit:%d\tcount books:%d\n", params.Limit, len(result[0].BookList))
+	}
+	return
+}
+
+// valideBookParams
+func valideBookParams(c *gin.Context) models.BookParams {
+	queryList := c.QueryArray("text")
 	if len(queryList) == 0 {
 		c.JSON(207, controllers.IncorrentParameters(c, "text"))
-		return
+		return models.BookParams{}
 	}
 	limit, err := strconv.Atoi(c.Query("count"))
 	if err != nil || limit == 0 {
 		limit = DefaultLimit
 	}
-	subdomain = c.Query("domain")
-	if len(subdomain) == 0 {
-		subdomain = DefaultSubDomain
+	source := c.Query("domain")
+	if len(source) == 0 {
+		source = DefaultSubDomain
 	}
 
-	return
+	return models.BookParams{
+		Texts:  tools.UniqueSlice(queryList),
+		Limit:  limit,
+		Source: source,
+	}
 }
 
-func checkNewQueriesInCache(items []string, limit int, subdomain string) (cacheResponse []models.QueryBooks, notFoundedInCache []string) {
-	for _, query := range items {
+func checkNewQueriesInCache(params models.BookParams) (cacheResponse []models.QueryBooks, notFoundedInCache []string) {
+	for _, query := range params.Texts {
 		BookCacheMutex.RLock()
-		requestStr := createCacheRequestStr(query, limit, subdomain)
+		requestStr := createCacheRequestStr(query, params.Limit, params.Source)
 		if val, ok := BookCache[requestStr]; ok {
 			fmt.Println("Прочитали из кэша: ", requestStr)
 			cacheResponse = append(cacheResponse, models.QueryBooks{Query: query, BookList: val})
@@ -71,14 +120,14 @@ func checkNewQueriesInCache(items []string, limit int, subdomain string) (cacheR
 	return cacheResponse, notFoundedInCache
 }
 
-func collectBooksFromHistory(r *book.Repository, queryList []string, subdomain string, limit int) (response []models.QueryBooks, notFounded []string, errors []error) {
+func collectBooksFromHistory(r *book.Repository, params models.BookParams) (response []models.QueryBooks, notFounded []string, errors []error) {
 	wg := sync.WaitGroup{}
-	wg.Add(len(queryList))
+	wg.Add(len(params.Texts))
 
-	for _, query := range queryList {
+	for _, query := range params.Texts {
 		go func(query string) {
 			defer wg.Done()
-			books, err := r.GetByQuery(query, limit, subdomain)
+			books, err := r.GetByQuery(query, params.Limit, params.Source)
 			if err != nil {
 				errors = append(errors, err)
 				return
@@ -89,7 +138,7 @@ func collectBooksFromHistory(r *book.Repository, queryList []string, subdomain s
 					BookList: books,
 				}
 				response = append(response, item)
-				requestStr := createCacheRequestStr(query, limit, subdomain)
+				requestStr := createCacheRequestStr(query, params.Limit, params.Source)
 				addRequestToCache(requestStr, books)
 			} else {
 				fmt.Println("не найден:", query)
@@ -101,8 +150,8 @@ func collectBooksFromHistory(r *book.Repository, queryList []string, subdomain s
 	return
 }
 
-func collectNotFoundedBooks(r *book.Repository, queryList []string, subdomain string, limit int) ([]models.QueryBooks, []error) {
-	if len(queryList) == 0 {
+func collectNotFoundedBooks(r *book.Repository, params models.BookParams) ([]models.QueryBooks, []error) {
+	if len(params.Texts) == 0 {
 		return nil, nil
 	}
 	var (
@@ -110,14 +159,14 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, subdomain st
 		selectErrors []error
 		wg           sync.WaitGroup
 	)
-	wg.Add(len(queryList))
+	wg.Add(len(params.Texts))
 
-	for _, query := range queryList {
+	for _, query := range params.Texts {
 		go func(query string) {
 			defer wg.Done()
 			var data models.QueryBooks
 
-			books, err := r.GetByName(query, subdomain)
+			books, err := r.GetByName(query, params.Source)
 			if err != nil {
 				selectErrors = append(selectErrors, err)
 				return
@@ -127,10 +176,10 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, subdomain st
 				r.SaveUndefiendQuery(query)
 			}
 			// Возвращаем пользователю limit книг
-			if len(books) > limit {
+			if len(books) > params.Limit {
 				data = models.QueryBooks{
 					Query:    query,
-					BookList: books[:limit],
+					BookList: books[:params.Limit],
 				}
 			} else {
 				data = models.QueryBooks{
@@ -140,7 +189,7 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, subdomain st
 			}
 
 			response = append(response, data)
-			requestStr := createCacheRequestStr(query, limit, subdomain)
+			requestStr := createCacheRequestStr(query, params.Limit, params.Source)
 			addRequestToCache(requestStr, books)
 			// Сохраняем все книги, а не limit штук
 			r.SaveBooks(models.QueryBooks{
@@ -151,7 +200,7 @@ func collectNotFoundedBooks(r *book.Repository, queryList []string, subdomain st
 		}(query)
 	}
 	wg.Wait()
-	logger.Log.Info(fmt.Sprintf("Для этих значений не было данных в истории %#v\n", queryList))
+	logger.Log.Info(fmt.Sprintf("Для этих значений не было данных в истории %#v\n", params.Texts))
 	return response, selectErrors
 }
 
