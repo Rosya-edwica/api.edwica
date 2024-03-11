@@ -18,11 +18,7 @@ func setViperSettings() {
 }
 
 type DB struct {
-	Addr     string `yaml:"host" env-required:"true"`
-	Port     int    `yaml:"port" env-required:"true"`
-	User     string `yaml:"user" env-required:"true"`
-	Password string `yaml:"password" env-required:"true"`
-	DB       string `yaml:"name" env-required:"true"`
+	URL string `yaml:"db_url"`
 }
 
 type Server struct {
@@ -44,11 +40,7 @@ func LoadDBConfig(path string) (*DB, error) {
 		return nil, errors.Wrap(err, "reading db config")
 	}
 	return &DB{
-		Addr:     viper.GetString("db_host"),
-		Port:     viper.GetInt("db_port"),
-		User:     viper.GetString("db_user"),
-		Password: viper.GetString("db_password"),
-		DB:       viper.GetString("db_name"),
+		URL: viper.GetString("db_url"),
 	}, nil
 }
 
