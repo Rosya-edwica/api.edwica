@@ -56,7 +56,7 @@ func CollectVacanciesFromTrudvsem(query models.VacancyQuery) ([]models.Vacancy, 
 // parseTrudvsemCity с помощью регулярок пытаемся вытащить город из полного адреса
 func parseTrudvsemCity(text string) string {
 	var (
-		reCity    = regexp.MustCompile(`г. .*?|,.*?район|г .*?,`)
+		reCity    = regexp.MustCompile(`г. .*?|г .*?,|,.*?район`)
 		reSubCity = regexp.MustCompile(`г. |, |г |,`)
 	)
 	city := reCity.FindString(strings.ToLower(text))
