@@ -58,7 +58,7 @@ func TestSaveBooks(t *testing.T) {
 			},
 		},
 	}
-	done, err := r.SaveBooks(data)
+	done, err := r.SaveBooksToQuery(data)
 	assert.False(t, done)
 	assert.EqualError(t, err, ErrorMsgNotExistBookId)
 
@@ -73,7 +73,7 @@ func TestSaveBooks(t *testing.T) {
 		Query:    "hello world",
 		BookList: books,
 	}
-	done, err = r.SaveBooks(data)
+	done, err = r.SaveBooksToQuery(data)
 	assert.True(t, done)
 	assert.NoError(t, err)
 
