@@ -28,15 +28,16 @@ func NewRepository(db *sqlx.DB) *Repository {
 
 func (r *Repository) GetByQuery(query string, limit int) ([]models.Video, error) {
 	rawVideos := make([]entities.Video, 0)
-	// Намерено делаю поле img пустым, так как оно не используется в АПИ, но в таблице влияет на уникальность данных (у некоторых видео разные картинки по размеру)
-	dbQuery := `SELECT DISTINCT video.id as id, video.name as name, video.url as url, '' as img
+	// Намерено делаю поле img пустым, так как оно не используется в АПИ,
+	// но в таблице влияет на уникальность данных (у некоторых видео разные картинки по размеру)
+	dbQuery := fmt.Sprintf(`SELECT DISTINCT video.video_id as id, video.name as name, video.url as url, '' as img
 	FROM video
-	INNER JOIN query_to_video ON video.id = query_to_video.video_id
-	WHERE query_to_video.query = ?`
+	INNER JOIN query_to_video ON video.video_id = query_to_video.video_id
+	WHERE query_to_video.query = '%s'`, query)
 	if limit > 0 {
 		dbQuery = fmt.Sprintf("%s LIMIT %d", dbQuery, limit)
 	}
-	err := r.db.Select(&rawVideos, dbQuery, query)
+	err := r.db.Select(&rawVideos, dbQuery)
 	if err != nil {
 		logger.Log.Error("database.video.getByQuery:" + err.Error())
 		return nil, errors.Wrap(err, "select video")
@@ -82,7 +83,7 @@ func (r *Repository) SaveVideos(data models.QueryVideos) (done bool, err error) 
 		return false, err
 	}
 	//Связываем видосы с запросом в таблице истории
-	_, err = tx.Exec(fmt.Sprintf("INSERT IGNORE INTO query_to_video(query, video_id) VALUES %s", strings.Join(videoIds, ",")))
+	_, err = tx.Exec(fmt.Sprintf("INSERT INTO query_to_video(query, video_id) VALUES %s ON CONFLICT DO NOTHING", strings.Join(videoIds, ",")))
 	if err != nil {
 		logger.Log.Error("database.video.saveVideos - insert data to query_to_video:" + err.Error())
 		return false, err
@@ -99,11 +100,14 @@ func (r *Repository) saveVideos(tx *sqlx.Tx, videos []models.Video) error {
 	}
 	valuesQuery := make([]string, 0, len(videos))
 	valuesArgs := make([]interface{}, 0, len(videos))
+
+	var id int
 	for _, video := range videos {
-		valuesQuery = append(valuesQuery, "(?, ?, ?, ?)")
+		valuesQuery = append(valuesQuery, fmt.Sprintf("($%d, $%d, $%d, $%d)", id+1, id+2, id+3, id+4))
 		valuesArgs = append(valuesArgs, video.Id, video.Name, video.Url, video.Image)
+		id += 4
 	}
-	query := fmt.Sprintf(`INSERT IGNORE INTO video(id, name, url, img)	VALUES %s`, strings.Join(valuesQuery, ","))
+	query := fmt.Sprintf(`INSERT INTO video(video_id, name, url, img)	VALUES %s ON CONFLICT DO NOTHING`, strings.Join(valuesQuery, ","))
 	_, err := tx.Exec(query, valuesArgs...)
 	if err != nil {
 		logger.Log.Error("database.video.saveVideos - insert new videos:" + err.Error())
