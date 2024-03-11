@@ -32,25 +32,17 @@ func NewRepository(db *sqlx.DB) *Repository {
 // Сначала ищем книги в query_to_book - это наш кэш
 func (r *Repository) GetByQuery(query string, limit int, subdomain string) ([]models.Book, error) {
 	rawBooks := make([]entities.Book, 0)
-	var dbQuery string
-	stmt := fmt.Sprintf(`SELECT book.id as id, name, description, language, price, old_price, min_age, rating,
+	stmt := `SELECT book.id as id, name, description, language, price, old_price, min_age, rating,
 		year, image, url, currency, pages
 		FROM book
 		INNER JOIN query_to_book ON book.id = query_to_book.book_id
-		WHERE query_to_book.query = '%s'`, query)
+		WHERE query_to_book.query = $1`
 
-	if subdomain != "" {
-		// Если выбрали определенный поддомен, то показываем книги для этого поддомена
-		stmt += fmt.Sprintf(" AND source = '%s'", subdomain)
-	} else {
-		// Если поддомен не выбирали, то показываем все бесплатные книги
-		stmt += fmt.Sprintf(" AND price = 0")
-	}
 	if limit > 0 {
 		stmt += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	err := r.db.Select(&rawBooks, dbQuery)
+	err := r.db.Select(&rawBooks, stmt, query)
 	if err != nil {
 		logger.Log.Error("database.book.getByQuery:" + err.Error())
 		return nil, errors.Wrap(err, "select book")
@@ -60,55 +52,30 @@ func (r *Repository) GetByQuery(query string, limit int, subdomain string) ([]mo
 
 // Используем этот метод, если по запросу не нашлось записей в таблице query_to_book
 func (r *Repository) GetByName(query, subdomain string) ([]models.Book, error) {
+	fmt.Println("get by nam")
 	rawBooks := make([]entities.Book, 0)
 	var dbQuery string
-	if subdomain != "" {
-		dbQuery = fmt.Sprintf(`SELECT id, name, description, language, price, old_price, min_age, rating,
+	dbQuery = `SELECT id, name, description, language, price, old_price, min_age, rating,
 		year, image, url, currency, pages
 		FROM book
-		WHERE to_tsvector('russian', name || ' ' || description) @@ to_tsquery('russian', '%s') 
-		AND source = '%s'`, query, subdomain)
-	} else {
-		dbQuery = fmt.Sprintf(`SELECT id, name, description, language, price, old_price, min_age, rating,
-		year, image, url, currency, pages
-		FROM book
-		WHERE  to_tsvector('russian', name || ' ' || description) @@ to_tsquery('russian', '%s')`,
-			query)
-	}
-	err := r.db.Select(&rawBooks, dbQuery)
-	if err != nil {
-		logger.Log.Error("database.book.getByName:" + err.Error())
-		return nil, errors.Wrap(err, "select book by name")
-	}
+		WHERE name ILIKE $1 AND source = $2`
+	err := r.db.Select(&rawBooks, dbQuery, "%"+query+"%", subdomain)
 	fmt.Println(len(rawBooks), query)
-	return models.NewBooks(rawBooks), nil
-}
-
-func (r *Repository) GetByNameWithSubdomain(query string, subdomain string) ([]models.Book, error) {
-	rawBooks := make([]entities.Book, 0)
-	dbQuery := fmt.Sprintf(`SELECT id, name, description, language, price, old_price, min_age, rating,
-		year, image, url, currency, pages
-		FROM book
-		WHERE to_tsvector('russian', name || ' ' || description) @@ to_tsquery('russian', '%s') 
-		  AND source = '%s'`, query, subdomain)
-
-	err := r.db.Select(&rawBooks, dbQuery)
 	if err != nil {
 		logger.Log.Error("database.book.getByName:" + err.Error())
-		return nil, errors.Wrap(err, "select book by name")
+		return []models.Book{}, errors.Wrap(err, "select book by name")
 	}
-	fmt.Println(rawBooks)
 	return models.NewBooks(rawBooks), nil
 }
 
-func (r *Repository) SaveNewBooks(books []models.Book) (done bool, err error) {
-	if len(books) == 0 {
+func (r *Repository) SaveNewBooks(data models.QueryBooks) (done bool, err error) {
+	if len(data.BookList) == 0 {
 		return false, nil
 	}
-	valuesQuery := make([]string, 0, len(books))
-	valuesArgs := make([]interface{}, 0, len(books))
+	valuesQuery := make([]string, 0, len(data.BookList))
+	valuesArgs := make([]interface{}, 0, len(data.BookList))
 	id := 0
-	for _, b := range books {
+	for _, b := range data.BookList {
 		valuesQuery = append(valuesQuery, fmt.Sprintf(`($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, 
 			$%d, $%d, $%d, $%d)`, id+1, id+2, id+3, id+4, id+5, id+6, id+7, id+8, id+9, id+10, id+11, id+12, id+13))
 		valuesArgs = append(valuesArgs, b.Id, b.Name, b.Description, b.Image, b.Url, b.OldPrice, b.Price, b.Currency,
@@ -123,8 +90,7 @@ func (r *Repository) SaveNewBooks(books []models.Book) (done bool, err error) {
 	if err != nil {
 		return false, errors.Wrap(err, "ошибка при сохранении новых книг")
 	}
-
-	return true, nil
+	return r.SaveBooksToQuery(data)
 }
 
 func (r *Repository) SaveBooksToQuery(data models.QueryBooks) (done bool, err error) {

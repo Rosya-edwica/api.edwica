@@ -17,7 +17,7 @@ import (
 )
 
 const DefaultLimit = 3
-const DefaultSubDomain = ""
+const DefaultSubDomain = "litres"
 
 // Будем хранить такие строки: "text=query&limit=3&subdomain=ssssss"
 // Это нужно для того, чтобы в кэше хранилась инфа не только о названии книги, но и количестве с поддоменом
@@ -28,54 +28,74 @@ var BookCacheMutex = sync.RWMutex{}
 func GetBooks(c *gin.Context) {
 	var response []models.QueryBooks
 	params := valideBookParams(c)
+	r := book.NewRepository(database.GetDB())
 
 	response, notFounded := checkNewQueriesInCache(params)
 	params.Texts = notFounded
-	if params.Source == "" && len(params.Texts) != 0 {
-		litresResp, _ := findBooksInLitres(params)
-		response = append(response, litresResp...)
-	} else if params.Source != "" {
-		DBResp, _ := findBooksInHistory(params)
+	if len(params.Texts) == 0 {
+		c.JSON(200, response)
+		return
+	}
+
+	if params.Source == DefaultSubDomain {
+		DBResp, notFounded, _ := findBooksInHistory(params, r)
 		response = append(response, DBResp...)
+		params.Texts = notFounded
+		if len(params.Texts) != 0 {
+			litresResp, _ := findBooksInLitres(params, r)
+			response = append(response, litresResp...)
+		}
+	} else {
+		sourceBooks, _ := findSourceBooks(params, r)
+		response = append(response, sourceBooks...)
 	}
 	c.JSON(200, response)
 
 }
 
-func findBooksInLitres(params models.BookParams) (response []models.QueryBooks, err error) {
+func findBooksInLitres(params models.BookParams, r *book.Repository) (response []models.QueryBooks, err error) {
 	var wg sync.WaitGroup
+	var books []models.Book
 	wg.Add(len(params.Texts))
+
 	for _, i := range params.Texts {
 		go func(text string) {
 			defer wg.Done()
 			var res models.QueryBooks
 			res, err = SearchBooks(text, params.Limit)
+			if err != nil && len(res.BookList) == 0 {
+				r.SaveUndefiendQuery(text)
+			}
 
 			response = append(response, res)
+			books = append(books, res.BookList...)
 			requestStr := createCacheRequestStr(text, params.Limit, params.Source)
 			addRequestToCache(requestStr, res.BookList)
+			done, err := r.SaveNewBooks(res)
+			fmt.Println(done, err)
 		}(i)
 	}
 	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
+
 	return
 }
 
-func findBooksInHistory(params models.BookParams) (result []models.QueryBooks, err error) {
-	r := book.NewRepository(database.GetDB())
-	response, notFounded, errList := collectBooksFromHistory(r, params)
+func findBooksInHistory(params models.BookParams, r *book.Repository) (result []models.QueryBooks, notFounded []string, err error) {
+	result, notFounded, errList := collectBooksFromHistory(r, params)
 	if len(errList) != 0 {
-		return nil, errors.Wrap(errList[0], "Ошибка при чтении книг из истории запросов")
+		return nil, nil, errors.Wrap(errList[0], "Ошибка при чтении книг из истории запросов")
 	}
-	params.Texts = notFounded
-	newBooks, errList := collectNotFoundedBooks(r, params)
+	return
+}
+
+func findSourceBooks(params models.BookParams, r *book.Repository) (result []models.QueryBooks, err error) {
+	result, errList := collectSourceBooks(r, params)
 	if len(errList) != 0 {
 		return nil, errors.Wrap(errList[0], "Ошибка при поиске книг в БД")
 	}
-	result = append(result, response...)
-	result = append(response, newBooks...)
 	if len(result) != 0 {
 		fmt.Printf("limit:%d\tcount books:%d\n", params.Limit, len(result[0].BookList))
 	}
@@ -150,7 +170,7 @@ func collectBooksFromHistory(r *book.Repository, params models.BookParams) (resp
 	return
 }
 
-func collectNotFoundedBooks(r *book.Repository, params models.BookParams) ([]models.QueryBooks, []error) {
+func collectSourceBooks(r *book.Repository, params models.BookParams) ([]models.QueryBooks, []error) {
 	if len(params.Texts) == 0 {
 		return nil, nil
 	}
@@ -171,10 +191,6 @@ func collectNotFoundedBooks(r *book.Repository, params models.BookParams) ([]mod
 				selectErrors = append(selectErrors, err)
 				return
 			}
-			if books == nil {
-				books = []models.Book{}
-				r.SaveUndefiendQuery(query)
-			}
 			// Возвращаем пользователю limit книг
 			if len(books) > params.Limit {
 				data = models.QueryBooks{
@@ -192,7 +208,7 @@ func collectNotFoundedBooks(r *book.Repository, params models.BookParams) ([]mod
 			requestStr := createCacheRequestStr(query, params.Limit, params.Source)
 			addRequestToCache(requestStr, books)
 			// Сохраняем все книги, а не limit штук
-			r.SaveBooks(models.QueryBooks{
+			r.SaveBooksToQuery(models.QueryBooks{
 				Query:    query,
 				BookList: books,
 			})

@@ -33,7 +33,8 @@ type BookParams struct {
 	Limit  int
 }
 
-func NewBooks(rawBooks []entities.Book) (books []Book) {
+func NewBooks(rawBooks []entities.Book) []Book {
+	books := make([]Book, 0, len(rawBooks))
 	for _, i := range rawBooks {
 		books = append(books, Book{
 			Id:          i.Id,
